@@ -2,6 +2,13 @@
 
 Ce script Python extrait des indicateurs clés à partir de tickets Zendesk.
 
+## Sommaire
+- [Fonctionnalités](#fonctionnalités)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Avertissement](#avertissement)
+
 ## Fonctionnalités
 
 - Récupère uniquement les tickets des types : `problem`, `task`, `question`, `incident`
@@ -17,11 +24,11 @@ pip install requests openpyxl tqdm
 
 ## Configuration
 
-Modifiez dans le script les variables suivantes avec vos infos Zendesk :
+Avant d'exécuter le script, modifiez les variables suivantes dans `zendesk_extract_KPI.py` :
 
-- SUBDOMAIN  
-- EMAIL  
-- API_TOKEN  
+- `SUBDOMAIN` : votre sous-domaine Zendesk  
+- `EMAIL` : votre email Zendesk  
+- `API_TOKEN` : votre token API Zendesk (ne partagez jamais ce token publiquement)
 
 ## Usage
 
