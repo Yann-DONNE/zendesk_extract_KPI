@@ -21,6 +21,9 @@ Ce script Python extrait des indicateurs clés à partir de tickets Zendesk.
 Installez les dépendances avec :
 pip install requests openpyxl tqdm
 
+Si vous n'avez pas Python installé, vous pouvez le télécharger ici :
+https://www.python.org/downloads/
+
 
 ## Configuration
 
@@ -41,4 +44,4 @@ Suivez les instructions pour choisir la plage de dates.
 
 ---
 
-*Ne partagez jamais vos clés API publiquement !*
+⚠️ Ne partagez jamais vos clés API publiquement !
