@@ -18,7 +18,7 @@ Ce script Python extrait des indicateurs clés à partir de tickets Zendesk.
 
 ## Installation
 
-Installez les dépendances, tapez CMD, puis dans l'invite de commandes tapez la ligne ci-dessous :
+Installez les dépendances, tapez CMD, puis dans l'invite de commandes tapez :
 pip install requests openpyxl tqdm
 
 Si vous n'avez pas Python installé, vous pouvez le télécharger ici :
