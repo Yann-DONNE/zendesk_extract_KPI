@@ -53,5 +53,13 @@ Voici une capture d'écran du script lors de l'extraction :
 ![Capture terminal](images/terminal.PNG)
 
 
+---
+
+<sub>
+**Tags** : zendesk kpi kpis kpi's KPIs analytics ticket extraction python excel reporting
+</sub>
+
+
+
 
 
