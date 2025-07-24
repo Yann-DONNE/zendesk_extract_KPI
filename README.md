@@ -50,7 +50,7 @@ Suivez les instructions pour choisir la plage de dates.
 
 Voici une capture d'écran du script lors de l'extraction :
 
-![Capture terminal](images/terminal.png)
+![Capture terminal](images/terminal.PNG)
 
 
 
