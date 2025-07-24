@@ -46,5 +46,12 @@ Suivez les instructions pour choisir la plage de dates.
 
 ⚠️ Ne partagez jamais vos clés API publiquement !
 
-![Texte alternatif](images/nom_de_ton_image.png)
+## Exemple d’exécution
+
+Voici une capture d'écran du script lors de l'extraction :
+
+![Capture terminal](images/terminal.png)
+
+
+
 
