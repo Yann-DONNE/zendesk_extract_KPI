@@ -1,5 +1,1 @@
-config.py
-*.pyc
-__pycache__/
-*.xlsx
-.env
+
