@@ -3,6 +3,7 @@ from requests.auth import HTTPBasicAuth
 from collections import defaultdict
 from datetime import datetime
 from openpyxl import Workbook
+from openpyxl.styles import Alignment
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -11,7 +12,7 @@ import time
 print("Script d'extraction KPI Zendesk")
 print("Auteur : Yann Donne")
 print("Date : 2025")
-print("Version : 1.1 (Plage de dates)")
+print("Version : 1.2 (Plage de dates + Stats mensuelles)")
 
 # Chrono début
 start_time = time.time()
@@ -160,13 +161,41 @@ for ticket in tickets:
         if score in ('good', 'bad'):
             satisfaction_counts[score] += 1
             total_notes += 1
-pct_satisfaction = round((satisfaction_counts['good'] / total_notes) * 100, 2) if total_notes > 0 else 0.0
+pct_satisfaction = round((satisfaction_counts['good'] / total_notes) * 100, 1) if total_notes > 0 else 0.0
 
 # Analyse nombre de tickets par type
 tickets_par_type = defaultdict(int)
 for ticket in tickets:
     ttype = ticket.get('type') or 'inconnu'
     tickets_par_type[ttype] += 1
+
+# --- Partie nouvelle : Extraction par mois et type + satisfaction par mois ---
+
+# Mois en français (index 1 = janvier)
+mois_fr = [
+    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+]
+
+# Structure de stockage par mois : { 'YYYY-MM' : { 'incident': int, 'question': int, 'task': int, 'total': int, 'good': int, 'bad': int } }
+stats_mensuelles = defaultdict(lambda: {'incident': 0, 'question': 0, 'task': 0, 'total': 0, 'good': 0, 'bad': 0})
+
+for ticket in tickets:
+    created_at = ticket.get('created_at')
+    if created_at:
+        # Format '2025-07-25T13:25:31Z' -> extraire YYYY-MM
+        mois_cle = created_at[:7]
+        ttype = ticket.get('type')
+        if ttype == 'problem':
+            ttype = 'incident'
+        if ttype in all_types:
+            stats_mensuelles[mois_cle][ttype] += 1
+            stats_mensuelles[mois_cle]['total'] += 1
+            satisfaction = ticket.get('satisfaction_rating')
+            if satisfaction and isinstance(satisfaction, dict):
+                score = satisfaction.get('score')
+                if score in ('good', 'bad'):
+                    stats_mensuelles[mois_cle][score] += 1
 
 # Création Excel
 wb = Workbook()
@@ -215,6 +244,51 @@ for ttype in all_types:
     ws_type.append([ttype, f"{count} ({pct}%)"])
 ws_type.append(["Total", total_tickets])
 
+# --- Nouvel onglet "Tickets par Mois" avec taux satisfaction et nombre avis ---
+
+ws_mois = wb.create_sheet(title="Tickets par Mois")
+
+# Entête
+entete = ["Mois", "Incidents", "Questions", "Tasks", "Total tickets", "% Satisfaction", "Nb Avis"]
+ws_mois.append(entete)
+
+# Centrage et style
+align_center = Alignment(horizontal='center', vertical='center')
+
+# Tri des mois par ordre chronologique
+mois_tries = sorted(stats_mensuelles.keys())
+
+for mois_cle in mois_tries:
+    data = stats_mensuelles[mois_cle]
+    # Mois et année pour afficher en français (ex: '2025-07' -> 'Juillet 2025')
+    annee, mois_num = mois_cle.split('-')
+    mois_fr_str = mois_fr[int(mois_num)-1] + " " + annee
+
+    # Calcul % satisfaction good
+    total_avis = data['good'] + data['bad']
+    pct_sat = (data['good'] / total_avis * 100) if total_avis > 0 else 0.0
+
+    # Formater nombre + %
+    def format_nb_pct(nb, total):
+        pct = (nb / total * 100) if total > 0 else 0
+        return f"{nb} ({int(pct)}%)"
+
+    ligne = [
+        mois_fr_str,
+        format_nb_pct(data['incident'], data['total']),
+        format_nb_pct(data['question'], data['total']),
+        format_nb_pct(data['task'], data['total']),
+        data['total'],
+        f"{round(pct_sat, 1)}%",
+        total_avis
+    ]
+    ws_mois.append(ligne)
+
+# Centrer les données
+for row in ws_mois.iter_rows(min_row=2, max_row=ws_mois.max_row, min_col=1, max_col=len(entete)):
+    for cell in row:
+        cell.alignment = align_center
+
 # Sauvegarde Excel
 wb.save("tickets_par_tags_et_delais.xlsx")
 
@@ -222,3 +296,4 @@ end_time = time.time()
 elapsed_time = round(end_time - start_time, 2)
 print(f"\n✔ Fichier Excel généré : tickets_par_tags_et_delais.xlsx en {elapsed_time} secondes.")
 input("Appuyez sur Entrée pour fermer...")
+
