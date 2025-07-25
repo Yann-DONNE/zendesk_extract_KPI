@@ -15,7 +15,7 @@ Ce script Python extrait des indicateurs clés à partir de tickets Zendesk.
 - ⚠️ Les tickets `Problem` sont transférés dans `incident` (vous pouvez supprimer ce paramètre si c'est gênant pour vous).
 - Calcule les délais de première réponse et de résolution
 - Analyse la satisfaction client, au mois aussi
-- Exporte les résultats dans un fichier Excel
+- Exporte les résultats dans un fichier Excel sous forme de plusieurs onglets
 
 ## Installation
 
