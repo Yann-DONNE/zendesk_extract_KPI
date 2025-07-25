@@ -8,7 +8,7 @@ Ce script Python extrait des indicateurs clés à partir de tickets Zendesk.
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Avertissement](#avertissement)
-- [Exemple d’exécution](#exemple-dexecution)
+- [Exemple d’exécution](#exemple-dexécution)
 
   
 
