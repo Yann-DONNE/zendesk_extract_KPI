@@ -62,7 +62,7 @@ Voici une capture d'écran du script lors de l'extraction :
 ---
 
 <sub>
-**Tags** : zendesk kpi kpis kpi's KPIs analytics ticket extraction python excel reporting
+**Tags** : zendesk kpi kpis kpi's KPIs analytics ticket extraction python excel reporting Yann DONNE
 </sub>
 
 
