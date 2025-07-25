@@ -45,6 +45,8 @@ Suivez les instructions pour choisir la plage de dates.
 
 ---
 
+## Avertissement
+
 ⚠️ Ne partagez jamais vos clés API publiquement !
 
 ## Exemple d’exécution
