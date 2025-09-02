@@ -19,8 +19,8 @@ start_time = time.time()
 
 # Paramètres Zendesk
 SUBDOMAIN = 'mediq-sav'
-EMAIL = 'votre_adresse_mail@group.com'
-API_TOKEN = 'Votre_clé_API'
+EMAIL = 'ton email'
+API_TOKEN = 'ta clé token'
 
 auth = HTTPBasicAuth(f'{EMAIL}/token', API_TOKEN)
 
