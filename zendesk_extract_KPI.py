@@ -19,8 +19,8 @@ start_time = time.time()
 
 # Paramètres Zendesk
 SUBDOMAIN = 'mediq-sav'
-EMAIL = 'ton email'
-API_TOKEN = 'ta clé token'
+EMAIL = 'TON E-MAIL '
+API_TOKEN = 'TA CLE TOKEN'
 
 auth = HTTPBasicAuth(f'{EMAIL}/token', API_TOKEN)
 
@@ -106,7 +106,7 @@ for ticket in tickets:
 
 def sort_com_tags(tags):
     def extract_number(tag):
-        match = re.search(r'com(\\d+)', tag)
+        match = re.search(r'com(\d+)', tag)  # Correction : \d+ au lieu de \\d+
         return int(match.group(1)) if match else float('inf')
     return sorted(tags, key=extract_number)
 
@@ -286,4 +286,6 @@ finally:
 elapsed = round(time.time() - start_time, 2)
 print(f"⏱ Terminé en {elapsed} secondes")
 input("Appuyez sur Entrée pour fermer...")
+
+
 
