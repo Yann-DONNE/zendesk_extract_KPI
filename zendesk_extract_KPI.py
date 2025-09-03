@@ -18,9 +18,9 @@ print("Version : 2.0 (Incremental API + Gestion erreurs)")
 start_time = time.time()
 
 # Paramètres Zendesk
-SUBDOMAIN = 'mediq-sav'
-EMAIL = 'TON E-MAIL '
-API_TOKEN = 'TA CLE TOKEN'
+SUBDOMAIN = 'ton domaine'
+EMAIL = 'ton email'
+API_TOKEN = 'ta clé API'
 
 auth = HTTPBasicAuth(f'{EMAIL}/token', API_TOKEN)
 
@@ -96,24 +96,35 @@ tag_data = defaultdict(lambda: {
     "total": 0
 })
 
+# --- NOUVEAU: sets pour uniques par type (tickets ayant au moins un tag com)
+unique_tagged_by_type = {t: set() for t in all_types}
+unique_tagged_total = set()
+
+# ✅ Correction appliquée : on ne compte que les types valides pour les totaux par tag
 for ticket in tickets:
-    ttype = ticket.get("type") or "inconnu"
+    ttype = ticket.get("type")
+    tid = ticket.get("id")
     tags = ticket.get("tags", [])
+    has_com = False
     for tag in tags:
-        if tag.startswith("com"):
+        if tag.startswith("com") and ttype in all_types:
             tag_data[tag]["types"][ttype] += 1
             tag_data[tag]["total"] += 1
+            has_com = True
+    if has_com and ttype in all_types and tid is not None:
+        unique_tagged_by_type[ttype].add(tid)
+        unique_tagged_total.add(tid)
 
 def sort_com_tags(tags):
     def extract_number(tag):
-        match = re.search(r'com(\d+)', tag)  # Correction : \d+ au lieu de \\d+
+        match = re.search(r'com(\d+)', tag)
         return int(match.group(1)) if match else float('inf')
     return sorted(tags, key=extract_number)
 
 com_tags_sorted = sort_com_tags([tag for tag in tag_data if tag.startswith("com")])
 
 # --- Récupération des métriques ---
-def get_ticket_metrics(ticket_id):
+def get_ticket_metrics(ticket_id, retries=3):
     url = f"https://{SUBDOMAIN}.zendesk.com/api/v2/tickets/{ticket_id}/metrics.json"
     try:
         response = requests.get(url, auth=auth, timeout=10)
@@ -123,46 +134,79 @@ def get_ticket_metrics(ticket_id):
             resolution_time = data.get("full_resolution_time_in_minutes", {}).get("calendar")
             return ticket_id, first_reply_time, resolution_time
         elif response.status_code == 429:
-            time.sleep(5)
-            return get_ticket_metrics(ticket_id)
+            if retries <= 0:
+                return ticket_id, None, None
+            retry_after = int(response.headers.get("Retry-After", 5))
+            time.sleep(retry_after)
+            return get_ticket_metrics(ticket_id, retries - 1)
         else:
             return ticket_id, None, None
     except Exception:
-        return ticket_id, None, None
+        if retries <= 0:
+            return ticket_id, None, None
+        time.sleep(2)
+        return get_ticket_metrics(ticket_id, retries - 1)
 
 delai_first_reply = {'0-1h': 0, '1-8h': 0, '8-24h': 0, '>24h': 0}
 delai_resolution = {'0-5h': 0, '5-24h': 0, '1-7j': 0, '7-30j': 0, '>30j': 0}
+
+# Pour cohérence : on rattache les métriques au type du ticket
+ticket_lookup = {ticket['id']: ticket for ticket in tickets if 'id' in ticket}
+
+# Counters par type pour métriques (permet de calculer "sans métrique" par type)
+metrics_first_by_type = defaultdict(int)
+metrics_resolution_by_type = defaultdict(int)
+tickets_with_first_reply = set()
+tickets_with_resolution = set()
 
 max_workers = 5  # réduit pour éviter surcharge API
 
 print("⏳ Récupération des métriques tickets...")
 with ThreadPoolExecutor(max_workers=max_workers) as executor:
-    futures = {executor.submit(get_ticket_metrics, ticket["id"]): ticket for ticket in tickets}
+    futures = {executor.submit(get_ticket_metrics, tid): tid for tid in ticket_lookup.keys()}
     for future in tqdm(as_completed(futures), total=len(futures), desc="Traitement des tickets"):
-        ticket_id, first_reply_time, resolution_time = future.result()
-        if first_reply_time is not None:
-            if first_reply_time <= 60:
-                delai_first_reply['0-1h'] += 1
-            elif first_reply_time <= 480:
-                delai_first_reply['1-8h'] += 1
-            elif first_reply_time <= 1440:
-                delai_first_reply['8-24h'] += 1
-            else:
-                delai_first_reply['>24h'] += 1
-        if resolution_time is not None:
-            if resolution_time <= 300:
-                delai_resolution['0-5h'] += 1
-            elif resolution_time <= 1440:
-                delai_resolution['5-24h'] += 1
-            elif resolution_time <= 10080:
-                delai_resolution['1-7j'] += 1
-            elif resolution_time <= 43200:
-                delai_resolution['7-30j'] += 1
-            else:
-                delai_resolution['>30j'] += 1
+        try:
+            ticket_id, first_reply_time, resolution_time = future.result()
+        except Exception:
+            # Sécurité : si une future lève, on ignore ce ticket (compte comme sans métrique)
+            continue
 
-total_first_reply = sum(delai_first_reply.values())
-total_resolution = sum(delai_resolution.values())
+        ticket_obj = ticket_lookup.get(ticket_id)
+        if not ticket_obj:
+            continue
+        ttype = ticket_obj.get('type')
+
+        # On ne prend en compte que les types valides
+        if ttype in all_types:
+            # First reply
+            if first_reply_time is not None:
+                tickets_with_first_reply.add(ticket_id)
+                metrics_first_by_type[ttype] += 1
+                if first_reply_time <= 60:
+                    delai_first_reply['0-1h'] += 1
+                elif first_reply_time <= 480:
+                    delai_first_reply['1-8h'] += 1
+                elif first_reply_time <= 1440:
+                    delai_first_reply['8-24h'] += 1
+                else:
+                    delai_first_reply['>24h'] += 1
+            # Resolution
+            if resolution_time is not None:
+                tickets_with_resolution.add(ticket_id)
+                metrics_resolution_by_type[ttype] += 1
+                if resolution_time <= 300:
+                    delai_resolution['0-5h'] += 1
+                elif resolution_time <= 1440:
+                    delai_resolution['5-24h'] += 1
+                elif resolution_time <= 10080:
+                    delai_resolution['1-7j'] += 1
+                elif resolution_time <= 43200:
+                    delai_resolution['7-30j'] += 1
+                else:
+                    delai_resolution['>30j'] += 1
+
+total_first_reply = sum(delai_first_reply.values())  # nombre tickets avec first_reply catégorisé
+total_resolution = sum(delai_resolution.values())  # nombre tickets avec resolution catégorisé
 
 # --- Satisfaction globale ---
 satisfaction_counts = {'good': 0, 'bad': 0}
@@ -181,6 +225,9 @@ tickets_par_type = defaultdict(int)
 for ticket in tickets:
     ttype = ticket.get('type') or 'inconnu'
     tickets_par_type[ttype] += 1
+
+# total des tickets considérés dans les stats (seulement les 3 types)
+total_tickets = sum([tickets_par_type[t] for t in all_types])
 
 # --- Stats mensuelles ---
 mois_fr = [
@@ -220,19 +267,70 @@ try:
         row.append(data['total'])
         ws_tags.append(row)
 
+    # --- Résumé de cohérence : tickets uniques avec >=1 com tag + sans tag
+    ws_tags.append([])  # ligne vide
+    ws_tags.append(["--- Résumé cohérence ---"])
+    summary_header = ["Indicateur"] + all_types + ["Total"]
+    ws_tags.append(summary_header)
+
+    # Unique tickets ayant au moins 1 com tag (par type)
+    unique_row = ["Tickets avec >=1 tag 'com'"]
+    for t in all_types:
+        unique_row.append(len(unique_tagged_by_type.get(t, set())))
+    unique_row.append(len(unique_tagged_total))
+    ws_tags.append(unique_row)
+
+    # Tickets sans tag 'com' (par type)
+    sans_tag_row = ["Tickets SANS tag 'com'"]
+    sum_sans_tag = 0
+    for t in all_types:
+        sans = tickets_par_type.get(t, 0) - len(unique_tagged_by_type.get(t, set()))
+        if sans < 0:
+            sans = 0
+        sans_tag_row.append(sans)
+        sum_sans_tag += sans
+    sans_tag_row.append(sum_sans_tag)
+    ws_tags.append(sans_tag_row)
+
+    # Totaux pour vérifier cohérence
+    total_row = ["Total tickets (par type)"]
+    sum_tot = 0
+    for t in all_types:
+        val = tickets_par_type.get(t, 0)
+        total_row.append(val)
+        sum_tot += val
+    total_row.append(sum_tot)
+    ws_tags.append(total_row)
+
     # Onglet délai 1ère prise
     ws_delai = wb.create_sheet(title="Délai 1ère Prise")
-    ws_delai.append(["Délai", "% Tickets", "Nombre estimé"])
+    ws_delai.append(["Délai", "% Tickets (sur total)", "Nombre estimé"])
+    # On affiche les catégories existantes puis on ajoute "Sans métrique" pour cohérence
     for categorie, count in delai_first_reply.items():
-        pct = round((count / total_first_reply) * 100) if total_first_reply > 0 else 0
+        pct = round((count / total_tickets) * 100, 1) if total_tickets > 0 else 0
         ws_delai.append([categorie, f"{pct}%", count])
+
+    # Ligne "Sans métrique" (tickets de types valides sans first_reply)
+    sum_cats_first = sum(delai_first_reply.values())
+    sans_metric_first = total_tickets - sum_cats_first
+    if sans_metric_first < 0:
+        sans_metric_first = 0
+    pct_sans_first = round((sans_metric_first / total_tickets) * 100, 1) if total_tickets > 0 else 0
+    ws_delai.append(["Sans métrique (aucun first_reply)", f"{pct_sans_first}%", sans_metric_first])
 
     # Onglet délai résolution
     ws_resol = wb.create_sheet(title="Délai Résolution Complète")
-    ws_resol.append(["Délai", "% Tickets", "Nombre estimé"])
+    ws_resol.append(["Délai", "% Tickets (sur total)", "Nombre estimé"])
     for categorie, count in delai_resolution.items():
-        pct = round((count / total_resolution) * 100) if total_resolution > 0 else 0
+        pct = round((count / total_tickets) * 100, 1) if total_tickets > 0 else 0
         ws_resol.append([categorie, f"{pct}%", count])
+
+    sum_cats_res = sum(delai_resolution.values())
+    sans_metric_res = total_tickets - sum_cats_res
+    if sans_metric_res < 0:
+        sans_metric_res = 0
+    pct_sans_res = round((sans_metric_res / total_tickets) * 100, 1) if total_tickets > 0 else 0
+    ws_resol.append(["Sans métrique (aucune resolution)", f"{pct_sans_res}%", sans_metric_res])
 
     # Onglet Satisfaction
     ws_satisfaction = wb.create_sheet(title="Satisfaction")
@@ -247,7 +345,7 @@ try:
     total_tickets = sum([tickets_par_type[t] for t in all_types])
     for ttype in all_types:
         count = tickets_par_type.get(ttype, 0)
-        pct = round((count / total_tickets) * 100) if total_tickets > 0 else 0
+        pct = round((count / total_tickets) * 100, 1) if total_tickets > 0 else 0
         ws_type.append([ttype, f"{count} ({pct}%)"])
     ws_type.append(["Total", total_tickets])
 
@@ -286,6 +384,7 @@ finally:
 elapsed = round(time.time() - start_time, 2)
 print(f"⏱ Terminé en {elapsed} secondes")
 input("Appuyez sur Entrée pour fermer...")
+
 
 
 
