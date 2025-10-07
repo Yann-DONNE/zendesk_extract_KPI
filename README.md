@@ -31,9 +31,9 @@ https://www.python.org/downloads/
 
 ## Configuration
 
-Si tu souhaites adapter ce script à ton propre environnement Zendesk, il te suffit de créer ou modifier le fichier config.json selon l’exemple ci-dessous :
+Si tu souhaites adapter ce script à ton propre environnement Zendesk, il te suffit de créer ou modifier le fichier `config.json` selon l’exemple ci-dessous :
 
-
+```json
 {
   "SUBDOMAIN": "TonDomaine",
   "EMAIL": "Ton_Nom@courriel.com",
