@@ -32,11 +32,15 @@ https://www.python.org/downloads/
 ## Configuration
 
 Si tu souhaites adapter ce script à ton propre environnement Zendesk, il te suffit de créer ou modifier le fichier config.json selon l’exemple ci-dessous :
+
+
 {
   "SUBDOMAIN": "TonDomaine",
   "EMAIL": "Ton_Nom@courriel.com",
   "API_TOKEN": "La clé d’API (token) que tu auras générée dans les paramètres de Zendesk"
 }
+
+
 ➡️ Important :
 Le fichier config.json doit impérativement être placé dans le même répertoire que le script zendesk_extract_KPI.
 
