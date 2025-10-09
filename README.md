@@ -50,7 +50,7 @@ Le fichier `config.json` doit impérativement être placé dans le même répert
 Lancez le script avec :
 
 ```bash
-python zendesk_extract_KPI
+python zendesk_extract_KPI.py
 ```
 
 Suivez ensuite les instructions pour choisir la plage de dates.
