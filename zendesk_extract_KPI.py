@@ -4,21 +4,41 @@ from requests.auth import HTTPBasicAuth
 from collections import defaultdict
 from datetime import datetime
 from openpyxl import Workbook
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, PatternFill, Font
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import time
 import os
 
-print("Script d'extraction KPI Zendesk (version améliorée)")
-print("Auteur : Yann Donne")
-print("Date : 2025")
-print("Version : 3.0 (Code refactorisé et sécurisé)")
+# ----------------------------- Entête console -----------------------------
+def print_header_corporate():
+    BLUE = "\033[94m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
 
-# Chrono début
+    header_lines = [
+        f"{BLUE}{BOLD}=================================================={RESET}",
+        f"{GREEN}{BOLD}          SCRIPT D'EXTRACTION KPI ZENDESK        {RESET}",
+        f"{BLUE}{BOLD}=================================================={RESET}",
+        f"{BOLD}Auteur :{RESET} Yann Donne",
+        f"{BOLD}Date   :{RESET} 2025",
+        f"{BOLD}Version:{RESET} 3.1 (Correction satisfaction mensuelle)",
+        f"{YELLOW}--------------------------------------------------{RESET}"
+    ]
+
+    for line in header_lines:
+        print(line)
+
+# Affichage de l'entête au lancement
+print_header_corporate()
+
+# ----------------------------- Chrono début -----------------------------
 start_time = time.time()
 
+# ----------------------------- Fonctions utilitaires -----------------------------
 def load_config(file_path='config.json'):
     """Charge les paramètres de connexion depuis un fichier JSON."""
     if not os.path.exists(file_path):
@@ -86,12 +106,10 @@ def get_ticket_metrics(auth, subdomain, ticket_id, retries=3):
 def process_data(tickets, all_types):
     """Traite les données brutes des tickets pour calculer les KPI."""
     
-    # Prétraitement et nettoyage
     for t in tickets:
         if t.get("type") == "problem":
             t["type"] = "incident"
 
-    # Données par tags
     tag_data = defaultdict(lambda: {"types": defaultdict(int), "total": 0})
     unique_tagged_by_type = {t: set() for t in all_types}
     unique_tagged_total = set()
@@ -110,7 +128,6 @@ def process_data(tickets, all_types):
             unique_tagged_by_type[ttype].add(tid)
             unique_tagged_total.add(tid)
     
-    # Trier les tags
     def sort_com_tags(tags):
         def extract_number(tag):
             match = re.search(r'com(\d+)', tag)
@@ -118,7 +135,6 @@ def process_data(tickets, all_types):
         return sorted(tags, key=extract_number)
     com_tags_sorted = sort_com_tags([tag for tag in tag_data if tag.startswith("com")])
 
-    # Métriques
     delai_first_reply = {'0-1h': 0, '1-8h': 0, '8-24h': 0, '>24h': 0}
     delai_resolution = {'0-5h': 0, '5-24h': 0, '1-7j': 0, '7-30j': 0, '>30j': 0}
     
@@ -177,16 +193,26 @@ def generate_excel_report(data_structs, tickets):
     ws_tags = wb.active
     ws_tags.title = "Tickets par Tags"
     all_types = ["incident", "question", "task"]
-    
-    # Onglet Tags
+
+    def add_colored_header(ws, headers):
+        fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")  # Bleu
+        font = Font(bold=True, color="FFFFFF")  # Texte blanc gras
+        alignment = Alignment(horizontal="center", vertical="center")
+        ws.append(headers)
+        for col_num in range(1, len(headers)+1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.fill = fill
+            cell.font = font
+            cell.alignment = alignment
+
+    # --- Onglet Tags ---
     header_tags = ["Tag"] + all_types + ["Total tickets"]
-    ws_tags.append(header_tags)
+    add_colored_header(ws_tags, header_tags)
     for tag in data_structs["com_tags_sorted"]:
         data = data_structs["tag_data"][tag]
         row = [tag] + [data['types'].get(t, 0) for t in all_types] + [data['total']]
         ws_tags.append(row)
 
-    # Résumé de cohérence
     ws_tags.append([])
     ws_tags.append(["--- Résumé cohérence ---"])
     summary_header = ["Indicateur"] + all_types + ["Total"]
@@ -214,9 +240,9 @@ def generate_excel_report(data_structs, tickets):
     total_row = ["Total tickets (par type)"] + [tickets_par_type.get(t, 0) for t in all_types] + [total_tickets]
     ws_tags.append(total_row)
     
-    # Onglet Délai 1ère Prise
+    # --- Onglet Délai 1ère Prise ---
     ws_delai = wb.create_sheet(title="Délai 1ère Prise")
-    ws_delai.append(["Délai", "% Tickets", "Nombre"])
+    add_colored_header(ws_delai, ["Délai", "% Tickets", "Nombre"])
     sum_cats_first = sum(data_structs["delai_first_reply"].values())
     for categorie, count in data_structs["delai_first_reply"].items():
         pct = round((count / total_tickets) * 100, 1) if total_tickets > 0 else 0
@@ -226,9 +252,9 @@ def generate_excel_report(data_structs, tickets):
     pct_sans_first = round((sans_metric_first / total_tickets) * 100, 1) if total_tickets > 0 else 0
     ws_delai.append(["Sans métrique", f"{pct_sans_first}%", sans_metric_first])
 
-    # Onglet Délai Résolution
+    # --- Onglet Délai Résolution ---
     ws_resol = wb.create_sheet(title="Délai Résolution Complète")
-    ws_resol.append(["Délai", "% Tickets", "Nombre"])
+    add_colored_header(ws_resol, ["Délai", "% Tickets", "Nombre"])
     sum_cats_res = sum(data_structs["delai_resolution"].values())
     for categorie, count in data_structs["delai_resolution"].items():
         pct = round((count / total_tickets) * 100, 1) if total_tickets > 0 else 0
@@ -238,8 +264,9 @@ def generate_excel_report(data_structs, tickets):
     pct_sans_res = round((sans_metric_res / total_tickets) * 100, 1) if total_tickets > 0 else 0
     ws_resol.append(["Sans métrique", f"{pct_sans_res}%", sans_metric_res])
 
-    # Onglet Satisfaction
+    # --- Onglet Satisfaction ---
     ws_satisfaction = wb.create_sheet(title="Satisfaction")
+    add_colored_header(ws_satisfaction, ["Indicateur", "Valeur"])
     satisfaction_counts = {'good': 0, 'bad': 0}
     total_notes = 0
     for ticket in tickets:
@@ -250,40 +277,44 @@ def generate_excel_report(data_structs, tickets):
                 satisfaction_counts[score] += 1
                 total_notes += 1
     pct_satisfaction = round((satisfaction_counts['good'] / total_notes) * 100, 1) if total_notes > 0 else 0.0
-    ws_satisfaction.append(["Indicateur", "Valeur"])
     ws_satisfaction.append(["% Satisfaction Globale", f"{pct_satisfaction}%"])
     ws_satisfaction.append(["Nombre 'Good'", satisfaction_counts['good']])
     ws_satisfaction.append(["Nombre 'Bad'", satisfaction_counts['bad']])
     
-    # Onglet Tickets par Type
+    # --- Onglet Tickets par Type ---
     ws_type = wb.create_sheet(title="Tickets par Type")
-    ws_type.append(["Type de ticket", "Nombre"])
+    add_colored_header(ws_type, ["Type de ticket", "Nombre"])
     for ttype in all_types:
         count = tickets_par_type.get(ttype, 0)
         pct = round((count / total_tickets) * 100, 1) if total_tickets > 0 else 0
         ws_type.append([ttype, f"{count} ({pct}%)"])
     ws_type.append(["Total", total_tickets])
     
-    # Onglet Mensuel
+    # --- Onglet Tickets par Mois ---
     ws_mois = wb.create_sheet(title="Tickets par Mois")
-    mois_fr = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
+    add_colored_header(ws_mois, ["Mois", "Incidents", "Questions", "Tasks", "Total tickets", "% Satisfaction", "Nb Avis"])
+    mois_fr = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+               "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
     stats_mensuelles = defaultdict(lambda: {'incident': 0, 'question': 0, 'task': 0, 'total': 0, 'good': 0, 'bad': 0})
-    for ticket in tickets:
-        created_at = ticket.get('created_at')
-        if created_at:
-            mois_cle = created_at[:7]
-            ttype = ticket.get('type')
-            if ttype in all_types:
-                stats_mensuelles[mois_cle][ttype] += 1
-                stats_mensuelles[mois_cle]['total'] += 1
-                satisfaction = ticket.get('satisfaction_rating')
-                if satisfaction and isinstance(satisfaction, dict):
-                    score = satisfaction.get('score')
-                    if score in ('good', 'bad'):
-                        stats_mensuelles[mois_cle][score] += 1
 
-    entete = ["Mois", "Incidents", "Questions", "Tasks", "Total tickets", "% Satisfaction", "Nb Avis"]
-    ws_mois.append(entete)
+    for ticket in tickets:
+        satisfaction = ticket.get('satisfaction_rating')
+        if satisfaction and isinstance(satisfaction, dict) and satisfaction.get('created_at'):
+            mois_cle = satisfaction['created_at'][:7]
+        else:
+            created_at = ticket.get('created_at')
+            mois_cle = created_at[:7] if created_at else "inconnu"
+
+        ttype = ticket.get('type')
+        if ttype in all_types:
+            stats_mensuelles[mois_cle][ttype] += 1
+            stats_mensuelles[mois_cle]['total'] += 1
+
+        if satisfaction and isinstance(satisfaction, dict):
+            score = satisfaction.get('score')
+            if score in ('good', 'bad'):
+                stats_mensuelles[mois_cle][score] += 1
+
     mois_tries = sorted(stats_mensuelles.keys())
     align_center = Alignment(horizontal='center', vertical='center')
     for mois_cle in mois_tries:
@@ -294,16 +325,15 @@ def generate_excel_report(data_structs, tickets):
         pct_sat = (data['good'] / total_avis * 100) if total_avis > 0 else 0.0
         ligne = [mois_fr_str, data['incident'], data['question'], data['task'], data['total'], f"{round(pct_sat, 1)}%", total_avis]
         ws_mois.append(ligne)
-    for row in ws_mois.iter_rows(min_row=2, max_row=ws_mois.max_row, min_col=1, max_col=len(entete)):
+    for row in ws_mois.iter_rows(min_row=2, max_row=ws_mois.max_row, min_col=1, max_col=7):
         for cell in row:
             cell.alignment = align_center
 
     wb.save("tickets_par_tags_et_delais.xlsx")
     print("✔ Fichier Excel généré : tickets_par_tags_et_delais.xlsx")
 
+# ----------------------------- Fonction principale -----------------------------
 def main():
-    """Fonction principale pour orchestrer le script."""
-    
     config = load_config()
     if not config:
         return
@@ -330,27 +360,23 @@ def main():
             
     print(f"📅 Extraction des tickets du {start_date.date()} au {end_date.date()}")
 
-    # 1. Extraction des tickets
     tickets = get_tickets_incremental(auth, config["SUBDOMAIN"], start_date, end_date)
     if not tickets:
         print("Aucun ticket récupéré. Arrêt du script.")
         return
 
-    # 2. Traitement des données et création des structures
     data_structs = process_data(tickets, all_types)
-
-    # 3. Collecte des métriques en parallèle
     collect_metrics(auth, config["SUBDOMAIN"], data_structs["ticket_lookup"].keys(), data_structs)
-
-    # 4. Génération du rapport Excel
     generate_excel_report(data_structs, tickets)
 
     elapsed = round(time.time() - start_time, 2)
     print(f"⏱ Terminé en {elapsed} secondes")
     input("Appuyez sur Entrée pour fermer...")
 
+# ----------------------------- Lancement -----------------------------
 if __name__ == "__main__":
     main()
+
 
 
 
